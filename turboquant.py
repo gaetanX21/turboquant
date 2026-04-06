@@ -17,14 +17,13 @@ def sample_rotation_matrix(d: int) -> T:
 
 def dist_unit_sphere(d: int) -> Callable[[T], T]:
     """Probability density of coordinates on unit sphere in dimension d."""
-    d = torch.tensor([d])
-    frac = torch.pi**-0.5 * torch.exp(torch.lgamma(d / 2) - torch.lgamma((d - 1) / 2))
-    return lambda x: frac * torch.pow(1 - x**2, (d - 3) / 2)
+    d_ = torch.tensor([d])
+    frac = torch.pi**-0.5 * torch.exp(torch.lgamma(d_ / 2) - torch.lgamma((d_ - 1) / 2))
+    return lambda x: frac * torch.pow(1 - x**2, (d_ - 3) / 2)
 
 
 def lloyd_max(
     dist: Callable[[T], T],
-    num_bins: int,
     b_init: T,
     max_iter: int = 1_000,
     eps: float = 1e-6,
@@ -75,17 +74,17 @@ def compute_q(
 class TurboQuant:
     """Implement the TurboQuant MSE quantization algorithm."""
 
-    def __init__(self, *, d: int, b: int) -> "TurboQuant":
+    def __init__(self, *, d: int, b: int) -> None:
         self.d = d
         self.b = b
         self._dist = dist_unit_sphere(d)
-        b, q = lloyd_max(self._dist, 2**b, self.b_init)
-        self._boundaries = b
-        self._centroids = q
+        boundaries, centroids = lloyd_max(self._dist, self.b_init)
+        self._boundaries = boundaries
+        self._centroids = centroids
         self._PI = sample_rotation_matrix(d)
 
     @property
-    def b_init(self):
+    def b_init(self) -> T:
         """Compute smart initial values for boundaries vector b."""
         # for point on sphere, coordinates are between -1 and 1
         min_, max_ = torch.tensor([-1.0]), torch.tensor([1.0])
@@ -111,7 +110,7 @@ class TurboQuant:
         idx = torch.clamp(idx, 0, len(self._centroids) - 1)  # safety
         return idx, norms
 
-    def dequantize(self, idx: T, norms: T) -> tuple[T, T]:
+    def dequantize(self, idx: T, norms: T) -> T:
         """Dequantize a matrix of (B, d) b-bits codes into a real-valued matrix of shape (B,d)."""
         y_hat = self._centroids[idx]
         x_hat_normalized = y_hat @ self._PI.T
